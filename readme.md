@@ -8,8 +8,10 @@ I've previously made some macros that do this for you but having to toggle setti
 This is particularly useful for toggling mana potion use since on some bosses you don't care too much about potion cooldown.  
 
 The current settings are:
+* Toggle the addon being enabled
 * Toggle whether to use consumes only in combat
 * Choose the size of group you need to be in for the addon be active
+* Toggle using tea
 * Toggle using potions at all, this means Major Mana Potion or Major Rejuvenation Potion
 * Toggle using Major Rejuvenation Potion
 * Toggle using Flask of Distilled Wisdom if you run out of mana

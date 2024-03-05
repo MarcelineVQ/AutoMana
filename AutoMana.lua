@@ -4,7 +4,13 @@
 local amcolor = {
   blue = format("|c%02X%02X%02X%02X", 1, 41,146,255),
   red = format("|c%02X%02X%02X%02X",1, 255, 0, 0),
-  green = format("|c%02X%02X%02X%02X",1, 22, 255, 22)
+  green = format("|c%02X%02X%02X%02X",1, 22, 255, 22),
+  yellow = format("|c%02X%02X%02X%02X",1, 255, 255, 0),
+  orange = format("|c%02X%02X%02X%02X",1, 255, 146, 24),
+  red = format("|c%02X%02X%02X%02X",1, 255, 0, 0),
+  gray = format("|c%02X%02X%02X%02X",1, 187, 187, 187),
+  gold = format("|c%02X%02X%02X%02X",1, 255, 255, 154),
+  blizzard = format("|c%02X%02X%02X%02X",1, 180,244,1),
 }
 
 local function colorize(msg,color)
@@ -12,9 +18,9 @@ local function colorize(msg,color)
   return c..msg..FONT_COLOR_CODE_CLOSE
 end
 
-function showOnOff(setting)
+local function showOnOff(setting)
   local b = "d"
-  return setting and colorize("On",amcolor["blue"]) or colorize("Off",amcolor["red"])
+  return setting and colorize("On",amcolor.blue) or colorize("Off",amcolor.red)
 end
 
 local function amprint(msg)
@@ -27,8 +33,10 @@ local oom = false
 -- User Options
 local defaults =
 {
+  enabled = true,
   combat_only = true,
   min_group_size = 10,
+  use_tea = true,
   use_potion = false,
   use_rejuv = false,
   use_flask = false,
@@ -128,7 +136,9 @@ end
 -- Macro code:
 function AutoMana(macro_body)
   local p = "player"
-  if (UnitAffectingCombat(p) or not AutoManaSettings["combat_only"]) and (max(GetNumRaidMembers(),GetNumPartyMembers()) >= AutoManaSettings["min_group_size"]) then
+  if AutoManaSettings.enabled
+    and (UnitAffectingCombat(p) or not AutoManaSettings["combat_only"])
+    and (max(GetNumRaidMembers(),GetNumPartyMembers()) >= AutoManaSettings["min_group_size"]) then
     local has_stone = hasAlchStone()
     local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
     local psb,pss,_ = FindItem(potion)
@@ -144,7 +154,7 @@ function AutoMana(macro_body)
     elseif AutoManaSettings["use_potion"] and (d1 and (d1-(GetTime()-s1) < 0)) then
       local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
       -- prefer rejuv use for health
-      -- This hp value is pro
+      -- This missing hp value is probably too extreme outside of naxx
       if AutoManaSettings["use_rejuv"] and (missing_health > (has_stone and 2340 or 1760)) then
         UseItemByName(rejuv)
         oom = false
@@ -172,42 +182,54 @@ local function OnEvent()
     if AutoManaSettings["use_flask"] then oom = true end
   elseif event == "ADDON_LOADED" then
     AutoMana:UnregisterEvent("ADDON_LOADED")
-    -- initialize default settings
-    if not AutoManaSettings then AutoManaSettings = defaults end
+    if not AutoManaSettings
+      then AutoManaSettings = defaults -- initialize default settings
+      else -- or update to new settings form
+        local s = {}
+        for k,v in pairs(defaults) do s[k] = AutoManaSettings[k] or defaults[k] end
+        AutoManaSettings = s
+    end
   end
 end
 
 local function handleCommands(msg,editbox)
   local args = {};
   for word in string.gfind(msg,'%S+') do table.insert(args,word) end
-
-  if args[1] == "pot" then
-    AutoManaSettings["use_potion"] = not AutoManaSettings["use_potion"]
-    amprint("Use Major Man Potion: "..showOnOff(AutoManaSettings["use_potion"]))
+  if args[1] == "tea" then
+    AutoManaSettings.use_tea = not AutoManaSettings.use_tea
+    amprint("Use Tea: "..showOnOff(AutoManaSettings.use_tea))
+  elseif args[1] == "pot" then
+    AutoManaSettings.use_potion = not AutoManaSettings.use_potion
+    amprint("Use Major Mana Potion: "..showOnOff(AutoManaSettings.use_potion))
   elseif args[1] == "rejuv" then
-    AutoManaSettings["use_rejuv"] = not AutoManaSettings["use_rejuv"]
-    amprint("Use Major Rejuvenation Potion: "..showOnOff(AutoManaSettings["use_rejuv"]))
+    AutoManaSettings.use_rejuv = not AutoManaSettings.use_rejuv
+    amprint("Use Major Rejuvenation Potion: "..showOnOff(AutoManaSettings.use_rejuv))
   elseif args[1] == "flask" then
-    AutoManaSettings["use_flask"] = not AutoManaSettings["use_flask"]
-    amprint("Use Flask of Distilled Wisdom: "..showOnOff(AutoManaSettings["use_flask"]))
+    AutoManaSettings.use_flask = not AutoManaSettings.use_flask
+    amprint("Use Flask of Distilled Wisdom: "..showOnOff(AutoManaSettings.use_flask))
   elseif args[1] == "size" then
     local n = tonumber(args[2])
     if n and n >= 0 then
-      AutoManaSettings["min_group_size"] = n
+      AutoManaSettings.min_group_size = n
       amprint("Active at minimum group size: "..n)
     else
       amprint("Usage: /automana size <non-negative number>")
     end
   elseif args[1] == "combat" then
-    AutoManaSettings["combat_only"] = not AutoManaSettings["combat_only"]
-    amprint("Use only in combat: "..showOnOff(AutoManaSettings["combat_only"]))
-  else -- make group size show number and also color by if you're in a big enough group currently
-    amprint('AutoMana: Wrap a macro with AutoMana('..colorize("macro",amcolor["green"])..') to auto-use consumes.')
-    amprint('- Active in combat only [' .. showOnOff(AutoManaSettings["combat_only"]) .. ']')
-    amprint('- Active at minimum group size [' .. AutoManaSettings["min_group_size"] .. ']')
-    amprint('- Use potions at all [' .. showOnOff(AutoManaSettings["use_potion"]) .. ']')
-    amprint('- Use Major Rejuvenation Potion [' .. showOnOff(AutoManaSettings["use_rejuv"]) .. ']')
-    amprint('- Use Flask of Distilled Wisdom [' .. showOnOff(AutoManaSettings["use_flask"]) .. ']')
+    AutoManaSettings.combat_only = not AutoManaSettings.combat_only
+    amprint("Use only in combat: "..showOnOff(AutoManaSettings.combat_only))
+  elseif args[1] == "enabled" then
+    AutoManaSettings.enabled = not AutoManaSettings.enabled
+    amprint("Addon enabled: "..showOnOff(AutoManaSettings.enabled))
+  else -- make group size color by if you're in a big enough group currently
+    amprint('AutoMana: Wrap a macro with AutoMana('..colorize("macro",amcolor.yellow)..') to auto-use consumes.')
+    amprint('- Addon '..colorize("enable",amcolor.green)..'d [' .. showOnOff(AutoManaSettings.enabled) .. ']')
+    amprint('- Active in ' .. colorize("combat",amcolor.green)..' only [' .. showOnOff(AutoManaSettings.combat_only) .. ']')
+    amprint('- Active at minimum group ' .. colorize("size",amcolor.green) .. ' [' .. AutoManaSettings.min_group_size .. ']')
+    amprint('- Use ' .. colorize("tea",amcolor.green) .. ' [' .. showOnOff(AutoManaSettings.use_tea) .. ']')
+    amprint('- Use '.. colorize("pot",amcolor.green) .. 'ions at all [' .. showOnOff(AutoManaSettings.use_potion) .. ']')
+    amprint('- Use Major ' .. colorize("rejuv",amcolor.green) .. 'enation Potion [' .. showOnOff(AutoManaSettings.use_rejuv) .. ']')
+    amprint('- Use ' ..colorize("flask",amcolor.green) ..' of Distilled Wisdom [' .. showOnOff(AutoManaSettings.use_flask) .. ']')
   end
 end
 
