@@ -146,12 +146,10 @@ function AutoMana(macro_body)
       -- prefer rejuv use for health
       -- This hp value is pro
       if AutoManaSettings["use_rejuv"] and (missing_health > (has_stone and 2340 or 1760)) then
-        print("used rejuv")
-        -- UseItemByName(rejuv)
+        UseItemByName(rejuv)
         oom = false
       elseif (missing_mana > (has_stone and 2992 or 2250)) then
-        -- UseContainerItem(psb,pss)
-        print("used major mana")
+        UseContainerItem(psb,pss)
         oom = false
       else -- no pot use? run the macro
         RunBody(macro_body)
