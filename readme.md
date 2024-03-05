@@ -2,7 +2,7 @@ AutoMana
 ===
 An addon to manage your mana consuming in Turtle WoW.  
 ---
-This addon uses mana consumes as soon as possible when you have enough mana missing.  
+This addon uses mana consumes as soon as possible when you have enough mana missing. This means the items will be off cooldown sooner as you can't miss out on using them and can result in considerably more available mana throughout a fight.  
 
 I've previously made some macros that do this for you but having to toggle settings on more than one spell when I wanted to change my consume use on the fly was quite painful. To that end I've made this addon that can wrap your casts and then your settings can be changed centrally and on the fly via `/automana`  
 This is particularly useful for toggling mana potion use since on some bosses you don't care too much about potion cooldown.  
