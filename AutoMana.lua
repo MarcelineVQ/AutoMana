@@ -1,6 +1,11 @@
 -- Name: AutoMana
 -- License: LGPL v2.1
 
+local DEBUG_MODE = false
+
+local success = true
+local failure = nil
+
 local amcolor = {
   blue = format("|c%02X%02X%02X%02X", 1, 41,146,255),
   red = format("|c%02X%02X%02X%02X",1, 255, 0, 0),
@@ -27,6 +32,10 @@ local function amprint(msg)
   DEFAULT_CHAT_FRAME:AddMessage(msg)
 end
 
+local function debug_print(text)
+    if DEBUG_MODE == true then DEFAULT_CHAT_FRAME:AddMessage(text) end
+end
+
 -- Did an oom event fire
 local oom = false
 
@@ -42,12 +51,20 @@ local defaults =
   use_flask = false,
 }
 
+local consumables = {}
+consumables.tea_nord = {name = "Nordanaar Herbal Tea", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
+consumables.tea_sugar = {name = "Tea with Sugar", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
+consumables.potion = {name = "Major Mana Potion", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
+consumables.rejuv = {name = "Major Rejuvenation Potion", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
+consumables.flask = {name = "Flask of Distilled Wisdom", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
+
 -- We can't search by item id on 1.12, sad
 local tea_nord,tea_sugar = "Nordanaar Herbal Tea","Tea with Sugar"
 local potion = "Major Mana Potion"
 local rejuv = "Major Rejuvenation Potion"
 local alchstone = "Alchemists' Stone"
 local flask = "Flask of Distilled Wisdom"
+
 
 local function hasAlchStone()
   return ItemLinkToName(GetInventoryItemLink("player",13)) == alchstone
@@ -90,14 +107,14 @@ local function FindItem(item)
 	if ( not item ) then return; end
 	item = string.lower(ItemLinkToName(item));
 	local link;
-	for i = 1,23 do
-		link = GetInventoryItemLink("player",i);
-		if ( link ) then
-			if ( item == string.lower(ItemLinkToName(link)) )then
-				return i, nil, GetInventoryItemTexture('player', i), GetInventoryItemCount('player', i);
-			end
-		end
-	end
+	-- for i = 1,23 do
+	-- 	link = GetInventoryItemLink("player",i);
+	-- 	if ( link ) then
+	-- 		if ( item == string.lower(ItemLinkToName(link)) )then
+	-- 			return i, nil, GetInventoryItemTexture('player', i), GetInventoryItemCount('player', i);
+	-- 		end
+	-- 	end
+	-- end
 	local count, bag, slot, texture;
 	local totalcount = 0;
 	for i = 0,NUM_BAG_FRAMES do
@@ -132,61 +149,88 @@ local function ItemLinkToName(link)
 	end
 end
 
--- /run AutoMana("/cast Healing Wave")
--- Macro code:
-function AutoMana(macro_body)
-  local p = "player"
-  if AutoManaSettings.enabled
-    and (UnitAffectingCombat(p) or not AutoManaSettings["combat_only"])
-    and (max(GetNumRaidMembers(),GetNumPartyMembers()) >= AutoManaSettings["min_group_size"]) then
-    local has_stone = hasAlchStone()
-    local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
-    local psb,pss,_ = FindItem(potion)
-    local s1,d1,_ = GetContainerItemCooldown(psb,pss)
-    local tsb,tss,_ = FindItem(tea_nord)
-    if not tsb and not tss then tsb,tss,_ = FindItem(tea_sugar) end
-    local s2,d2,_ = tss and GetContainerItemCooldown(tsb,tss)
+local function updateConsume(k)
+  local bag, slot = FindItem(k.name)
+  if ( slot ) then
+    k.have = true
+    k.bag_slot.b = bag
+    k.bag_slot.s = slot
+    local s,d,b = GetContainerItemCooldown(bag, slot)
+    k.cd_expired = d and (d - (GetTime() - s) < 0)
+    debug_print(k.name)
+    debug_print(tostring(k.have))
+    debug_print(tostring(k.cd_expired))
+    return success
+  else
+    k.have = false
+    return failure
+  end
+end
 
-    -- prefer tea first
-    if (d2 and (d2-(GetTime()-s2) < 0)) and (missing_mana > 1750) then
-      UseContainerItem(tsb,tss)
-      oom = false
-    elseif AutoManaSettings["use_potion"] and (d1 and (d1-(GetTime()-s1) < 0)) then
+local function tryConsume(con)
+  if con.have and con.cd_expired then
+    UseContainerItem(con.bag_slot.b,con.bag_slot.s)
+    oom = false
+    return success
+  end
+end
+
+local function rdyConsume(k)
+  updateConsume(k)
+  return (k.have and k.cd_expired)
+end
+
+function AutoMana(macro_body)
+    local p = "player"
+    if AutoManaSettings.enabled
+      and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
+      and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
+      local has_stone = hasAlchStone()
+      local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
       local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
-      -- prefer rejuv use for health
-      -- This missing hp value is probably too extreme outside of naxx
-      if AutoManaSettings["use_rejuv"] and (missing_health > (has_stone and 2340 or 1760)) then
-        UseItemByName(rejuv)
-        oom = false
-      elseif (missing_mana > (has_stone and 2992 or 2250)) then
-        UseContainerItem(psb,pss)
-        oom = false
-      else -- no pot use? run the macro
+      local tea = (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
+
+      -- This is ugly but when I tried an if-fallthrough version the game didn't fire off the consumes consistently.
+      if AutoManaSettings.use_tea and (missing_mana > 1750) and (tea and tea.cd_expired) then
+        debug_print("Trying Tea")
+        tryConsume(tea)
+      elseif AutoManaSettings.use_rejuv and (missing_health > (has_stone and 2340 or 1760)) and rdyConsume(consumables.rejuv) then
+        debug_print("Trying Rejuv")
+        tryConsume(consumables.rejuv)
+      elseif AutoManaSettings.use_potion and (missing_mana > (has_stone and 2992 or 2250)) and rdyConsume(consumables.potion)then
+        debug_print("Trying Potion")
+        tryConsume(consumables.potion)
+      elseif AutoManaSettings.use_flask and oom and rdyConsume(consumables.flask)then
+        debug_print("Trying Flask")
+        tryConsume(consumables.flask)
+      else
         RunBody(macro_body)
       end
-    elseif oom then
-      UseItemByName("Flask of Distilled Wisdom")
-      oom = false
     else
       RunBody(macro_body)
     end
-  else
-    RunBody(macro_body)
-  end
 end
+
+-------------------------------------------------
 
 local AutoMana = CreateFrame("FRAME")
 
 local function OnEvent()
+--   if event == "BAG_UPDATE" then
+    -- checkConsumes()
   if event == "UI_ERROR_MESSAGE" and arg1 == "Not enough mana" then
-    if AutoManaSettings["use_flask"] then oom = true end
+    if AutoManaSettings.use_flask then oom = true end
   elseif event == "ADDON_LOADED" then
     AutoMana:UnregisterEvent("ADDON_LOADED")
     if not AutoManaSettings
       then AutoManaSettings = defaults -- initialize default settings
-      else -- or update to new settings form
+      else -- or check that we only have the current settings format
         local s = {}
-        for k,v in pairs(defaults) do s[k] = AutoManaSettings[k] or defaults[k] end
+        for k,v in pairs(defaults) do
+          if AutoManaSettings[k] == nil -- specifically nil
+            then s[k] = defaults[k]
+            else s[k] = AutoManaSettings[k] end
+        end
         AutoManaSettings = s
     end
   end
@@ -234,9 +278,9 @@ local function handleCommands(msg,editbox)
 end
 
 AutoMana:RegisterEvent("UI_ERROR_MESSAGE")
+-- AutoMana:RegisterEvent("BAG_UPDATE")
 AutoMana:RegisterEvent("ADDON_LOADED")
 AutoMana:SetScript("OnEvent", OnEvent)
   
 SLASH_AUTOMANA1 = "/automana";
 SlashCmdList["AUTOMANA"] = handleCommands
-  
