@@ -58,6 +58,13 @@ consumables.potion = {name = "Major Mana Potion", have = false, needs_update = t
 consumables.rejuv = {name = "Major Rejuvenation Potion", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
 consumables.flask = {name = "Flask of Distilled Wisdom", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
 
+-- consumables.tea_nord = {name = "Nordanaar Herbal Tea", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+-- consumables.tea_sugar = {name = "Tea with Sugar", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+-- consumables.potion = {name = "Major Mana Potion", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+-- consumables.rejuv = {name = "Major Rejuvenation Potion", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+-- consumables.flask = {name = "Flask of Distilled Wisdom", have = false, cd_started = nil, cd_length = 3, bag_slot = {b = nil, s = nil}}
+-- the above is enough to determine if we need to update the item
+
 -- We can't search by item id on 1.12, sad
 local tea_nord,tea_sugar = "Nordanaar Herbal Tea","Tea with Sugar"
 local potion = "Major Mana Potion"
@@ -90,31 +97,17 @@ local function RunBody(text)
 end
 
 -- taken from supermacros
-local function UseItemByName(item)
-	local bag,slot = FindItem(item);
-	if ( not bag ) then return; end;
-	if ( slot ) then
-		UseContainerItem(bag,slot); -- use, equip item in bag
-		return bag, slot;
-	else
-		UseInventoryItem(bag); -- unequip from body
-		return bag;
+local function ItemLinkToName(link)
+	if ( link ) then
+   	return gsub(link,"^.*%[(.*)%].*$","%1");
 	end
 end
 
--- taken from supermacros
+-- adapted from supermacros
 local function FindItem(item)
 	if ( not item ) then return; end
 	item = string.lower(ItemLinkToName(item));
 	local link;
-	-- for i = 1,23 do
-	-- 	link = GetInventoryItemLink("player",i);
-	-- 	if ( link ) then
-	-- 		if ( item == string.lower(ItemLinkToName(link)) )then
-	-- 			return i, nil, GetInventoryItemTexture('player', i), GetInventoryItemCount('player', i);
-	-- 		end
-	-- 	end
-	-- end
 	local count, bag, slot, texture;
 	local totalcount = 0;
 	for i = 0,NUM_BAG_FRAMES do
@@ -143,10 +136,22 @@ local function GetItemCooldown(item)
 end
 
 -- taken from supermacros
-local function ItemLinkToName(link)
-	if ( link ) then
-   	return gsub(link,"^.*%[(.*)%].*$","%1");
+local function UseItemByName(item)
+	local bag,slot = FindItem(item);
+	if ( not bag ) then return; end;
+	if ( slot ) then
+		UseContainerItem(bag,slot); -- use, equip item in bag
+		return bag, slot;
+	else
+		UseInventoryItem(bag); -- unequip from body
+		return bag;
 	end
+end
+
+-- treats not haing a cd as not being expired
+-- exported because it's useful
+function isCDExpired(start,duration,hascd)
+  return (hascd == 1) and (duration and (duration - (GetTime() - start) < 0))
 end
 
 local function updateConsume(k)
@@ -155,8 +160,7 @@ local function updateConsume(k)
     k.have = true
     k.bag_slot.b = bag
     k.bag_slot.s = slot
-    local s,d,b = GetContainerItemCooldown(bag, slot)
-    k.cd_expired = d and (d - (GetTime() - s) < 0)
+    k.cd_expired = isCDExpired(GetContainerItemCooldown(bag, slot))
     debug_print(k.name)
     debug_print(tostring(k.have))
     debug_print(tostring(k.cd_expired))
@@ -180,6 +184,7 @@ local function rdyConsume(k)
   return (k.have and k.cd_expired)
 end
 
+-- the checks should track the last cooldown value and ask if enough time has elapsed to care, so it doesn't have to scan bags as often
 function AutoMana(macro_body)
     local p = "player"
     if AutoManaSettings.enabled
@@ -188,9 +193,9 @@ function AutoMana(macro_body)
       local has_stone = hasAlchStone()
       local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
       local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
-      local tea = (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
+      local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
 
-      -- This is ugly but when I tried an if-fallthrough version the game didn't fire off the consumes consistently.
+      -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
       if AutoManaSettings.use_tea and (missing_mana > 1750) and (tea and tea.cd_expired) then
         debug_print("Trying Tea")
         tryConsume(tea)
@@ -231,6 +236,7 @@ local function OnEvent()
             then s[k] = defaults[k]
             else s[k] = AutoManaSettings[k] end
         end
+        -- is the above just: s[k] = ((AutoManaSettings[k] == nil) and defaults[k]) or AutoManaSettings[k]
         AutoManaSettings = s
     end
   end
@@ -242,16 +248,16 @@ local function handleCommands(msg,editbox)
   if args[1] == "tea" then
     AutoManaSettings.use_tea = not AutoManaSettings.use_tea
     amprint("Use Tea: "..showOnOff(AutoManaSettings.use_tea))
-  elseif args[1] == "pot" then
+  elseif args[1] == "pot" or args[1] == "potion" then
     AutoManaSettings.use_potion = not AutoManaSettings.use_potion
     amprint("Use Major Mana Potion: "..showOnOff(AutoManaSettings.use_potion))
-  elseif args[1] == "rejuv" then
+  elseif args[1] == "rejuv" or args[1] == "rejuvenation" then
     AutoManaSettings.use_rejuv = not AutoManaSettings.use_rejuv
     amprint("Use Major Rejuvenation Potion: "..showOnOff(AutoManaSettings.use_rejuv))
   elseif args[1] == "flask" then
     AutoManaSettings.use_flask = not AutoManaSettings.use_flask
     amprint("Use Flask of Distilled Wisdom: "..showOnOff(AutoManaSettings.use_flask))
-  elseif args[1] == "size" then
+  elseif args[1] == "size" or args[1] == "group" then
     local n = tonumber(args[2])
     if n and n >= 0 then
       AutoManaSettings.min_group_size = n
@@ -262,7 +268,7 @@ local function handleCommands(msg,editbox)
   elseif args[1] == "combat" then
     AutoManaSettings.combat_only = not AutoManaSettings.combat_only
     amprint("Use only in combat: "..showOnOff(AutoManaSettings.combat_only))
-  elseif args[1] == "enabled" then
+  elseif args[1] == "enabled" or args[1] == "enable" or args[1] == "toggle" then
     AutoManaSettings.enabled = not AutoManaSettings.enabled
     amprint("Addon enabled: "..showOnOff(AutoManaSettings.enabled))
   else -- make group size color by if you're in a big enough group currently

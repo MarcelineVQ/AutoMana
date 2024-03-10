@@ -27,3 +27,5 @@ If enabled, Major Rejuvenation will be used instead of Major Mana if you're miss
 
 # Wrapping a Clique cast to use AutoMana:
 ![Clique Wrapping](./cliquemacro.png)
+
+* This addon is made by and for `Weird Vibes` of Turtle WoW.  
