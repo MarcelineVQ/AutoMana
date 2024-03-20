@@ -58,12 +58,17 @@ consumables.potion = {name = "Major Mana Potion", have = false, needs_update = t
 consumables.rejuv = {name = "Major Rejuvenation Potion", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
 consumables.flask = {name = "Flask of Distilled Wisdom", have = false, needs_update = true, cd_expired = false, bag_slot = {b = nil, s = nil}}
 
--- consumables.tea_nord = {name = "Nordanaar Herbal Tea", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
--- consumables.tea_sugar = {name = "Tea with Sugar", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
--- consumables.potion = {name = "Major Mana Potion", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
--- consumables.rejuv = {name = "Major Rejuvenation Potion", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
--- consumables.flask = {name = "Flask of Distilled Wisdom", have = false, cd_started = nil, cd_length = 3, bag_slot = {b = nil, s = nil}}
+local consumables2 = {}
+consumables2.tea_nord = {name = "Nordanaar Herbal Tea", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+consumables2.tea_sugar = {name = "Tea with Sugar", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+consumables2.potion = {name = "Major Mana Potion", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+consumables2.rejuv = {name = "Major Rejuvenation Potion", have = false, cd_started = nil, cd_length = 120, bag_slot = {b = nil, s = nil}}
+consumables2.flask = {name = "Flask of Distilled Wisdom", have = false, cd_started = nil, cd_length = 3, bag_slot = {b = nil, s = nil}}
 -- the above is enough to determine if we need to update the item
+
+-- for e in pairs(consumables2) do
+--   e.cd_started = GetTime() + cd_length
+-- end
 
 -- We can't search by item id on 1.12, sad
 local tea_nord,tea_sugar = "Nordanaar Herbal Tea","Tea with Sugar"
@@ -184,10 +189,72 @@ local function rdyConsume(k)
   return (k.have and k.cd_expired)
 end
 
+
+-- efficieny changes:
 -- the checks should track the last cooldown value and ask if enough time has elapsed to care, so it doesn't have to scan bags as often
+-- alch stone could be checked again only if an equipment update event fired
+-- local last_fired = GetTime()
+-- function AutoMana2(macro_body)
+--     local p = "player"
+--     local now = GetTime()
+--     local gcd_done = now - last_fired > 1.5
+--     debug_print(last_fired)
+
+--     if AutoManaSettings.enabled and gcd_done then
+--       and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
+--       and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
+--       local has_stone = hasAlchStone()
+--       local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
+--       local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
+--       -- local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
+
+--       -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
+--       if AutoManaSettings.use_tea and (missing_mana > 1750)
+--           and isCDExpired(tea.cooldown_started,tea.cooldown_duration,1) then
+--         debug_print("Trying Tea")
+--         local b,s,_ = FindItem(consumables2.tea_nord.name)
+--         if not s then b,s,_ = FindItem(consumables2.tea_sugar.name) end
+--         if s then
+--           local tea = consumables2.tea_sugar.name
+--           UseContainerItem(tea.bag_slot.b,tea.bag_slot.s)
+--           tea.cooldown_started = GetTime()
+--           oom = false
+--         end
+--       elseif AutoManaSettings.use_rejuv and (missing_health > (has_stone and 2340 or 1760))
+--           and isCDExpired(consumables2.rejuv.cooldown_started,consumables2.rejuv.cooldown_duration,1) then
+--         debug_print("Trying Rejuv")
+--         tryConsume(consumables.rejuv)
+--       elseif AutoManaSettings.use_potion and (missing_mana > (has_stone and 2992 or 2250))
+--           and isCDExpired(consumables2.potion.cooldown_started,consumables2.potion.cooldown_duration,1) then
+--         debug_print("Trying Potion")
+--         tryConsume(consumables.potion)
+--       elseif AutoManaSettings.use_flask and oom
+--           and isCDExpired(consumables2.flask.cooldown_started,consumables2.flask.cooldown_duration,1) then
+--         debug_print("Trying Flask")
+--         tryConsume(consumables.flask)
+--       else
+--         RunBody(macro_body)
+--       end
+--       last_fired = now
+--     else
+--       RunBody(macro_body)
+--       last_fired = now
+--     end
+-- end
+
+-- efficieny changes:
+-- the checks should track the last cooldown value and ask if enough time has elapsed to care, so it doesn't have to scan bags as often
+-- alch stone could be checked again only if an equipment update event fired
+local last_fired = GetTime()
 function AutoMana(macro_body)
     local p = "player"
-    if AutoManaSettings.enabled
+    local now = GetTime()
+    -- local gcd_done = now - last_fired > 1.0 -- not 1.5 due to latency, you want to be able to start 'early'
+    -- ^ this seems like it's not working right, the intent was just to not drink too much at once
+    local gcd_done = true
+    debug_print(last_fired)
+
+    if AutoManaSettings.enabled and gcd_done
       and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
       and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
       local has_stone = hasAlchStone()
@@ -196,23 +263,25 @@ function AutoMana(macro_body)
       local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
 
       -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
-      if AutoManaSettings.use_tea and (missing_mana > 1750) and (tea and tea.cd_expired) then
+      if AutoManaSettings.use_tea and gcd_done and (missing_mana > 1750) and (tea and tea.cd_expired) then
         debug_print("Trying Tea")
         tryConsume(tea)
-      elseif AutoManaSettings.use_rejuv and (missing_health > (has_stone and 2340 or 1760)) and rdyConsume(consumables.rejuv) then
+      elseif AutoManaSettings.use_rejuv and gcd_done and (missing_health > (has_stone and 2340 or 1760)) and rdyConsume(consumables.rejuv) then
         debug_print("Trying Rejuv")
         tryConsume(consumables.rejuv)
-      elseif AutoManaSettings.use_potion and (missing_mana > (has_stone and 2992 or 2250)) and rdyConsume(consumables.potion)then
+      elseif AutoManaSettings.use_potion and gcd_done and (missing_mana > (has_stone and 2992 or 2250)) and rdyConsume(consumables.potion)then
         debug_print("Trying Potion")
         tryConsume(consumables.potion)
-      elseif AutoManaSettings.use_flask and oom and rdyConsume(consumables.flask)then
+      elseif AutoManaSettings.use_flask and gcd_done and oom and rdyConsume(consumables.flask)then
         debug_print("Trying Flask")
         tryConsume(consumables.flask)
       else
         RunBody(macro_body)
       end
+      last_fired = now
     else
       RunBody(macro_body)
+      last_fired = now
     end
 end
 
