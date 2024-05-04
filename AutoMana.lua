@@ -77,6 +77,12 @@ local rejuv = "Major Rejuvenation Potion"
 local alchstone = "Alchemists' Stone"
 local flask = "Flask of Distilled Wisdom"
 
+-- taken from supermacros
+local function ItemLinkToName(link)
+	if ( link ) then
+    return gsub(link,"^.*%[(.*)%].*$","%1");
+	end
+end
 
 local function hasAlchStone()
   return ItemLinkToName(GetInventoryItemLink("player",13)) == alchstone
@@ -98,13 +104,6 @@ local function RunBody(text)
 	local length = strlen(body);
 	for w in string.gfind(body, "[^\n]+") do
 		RunLine(w);
-	end
-end
-
--- taken from supermacros
-local function ItemLinkToName(link)
-	if ( link ) then
-   	return gsub(link,"^.*%[(.*)%].*$","%1");
 	end
 end
 
@@ -257,11 +256,12 @@ function AutoMana(macro_body)
     if AutoManaSettings.enabled and gcd_done
       and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
       and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
+      -- debug_print("fork entered")
       local has_stone = hasAlchStone()
       local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
       local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
       local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
-
+      -- debug_print("fork started")
       -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
       if AutoManaSettings.use_tea and gcd_done and (missing_mana > 1750) and (tea and tea.cd_expired) then
         debug_print("Trying Tea")
@@ -276,6 +276,7 @@ function AutoMana(macro_body)
         debug_print("Trying Flask")
         tryConsume(consumables.flask)
       else
+        debug_print("Running body")
         RunBody(macro_body)
       end
       last_fired = now
