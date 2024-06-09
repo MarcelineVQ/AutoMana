@@ -100,8 +100,6 @@ end
 
 -- adapted from supermacros
 local function RunBody(text)
-  if type(text) ~= "string" then return end
-  -- ^ lets you use functions instead of a macro
 	local body = text;
 	local length = strlen(body);
 	for w in string.gfind(body, "[^\n]+") do
@@ -190,49 +188,102 @@ local function rdyConsume(k)
   return (k.have and k.cd_expired)
 end
 
+
+-- efficieny changes:
+-- the checks should track the last cooldown value and ask if enough time has elapsed to care, so it doesn't have to scan bags as often
+-- alch stone could be checked again only if an equipment update event fired
+-- local last_fired = GetTime()
+-- function AutoMana2(macro_body)
+--     local p = "player"
+--     local now = GetTime()
+--     local gcd_done = now - last_fired > 1.5
+--     debug_print(last_fired)
+
+--     if AutoManaSettings.enabled and gcd_done then
+--       and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
+--       and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
+--       local has_stone = hasAlchStone()
+--       local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
+--       local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
+--       -- local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
+
+--       -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
+--       if AutoManaSettings.use_tea and (missing_mana > 1750)
+--           and isCDExpired(tea.cooldown_started,tea.cooldown_duration,1) then
+--         debug_print("Trying Tea")
+--         local b,s,_ = FindItem(consumables2.tea_nord.name)
+--         if not s then b,s,_ = FindItem(consumables2.tea_sugar.name) end
+--         if s then
+--           local tea = consumables2.tea_sugar.name
+--           UseContainerItem(tea.bag_slot.b,tea.bag_slot.s)
+--           tea.cooldown_started = GetTime()
+--           oom = false
+--         end
+--       elseif AutoManaSettings.use_rejuv and (missing_health > (has_stone and 2340 or 1760))
+--           and isCDExpired(consumables2.rejuv.cooldown_started,consumables2.rejuv.cooldown_duration,1) then
+--         debug_print("Trying Rejuv")
+--         tryConsume(consumables.rejuv)
+--       elseif AutoManaSettings.use_potion and (missing_mana > (has_stone and 2992 or 2250))
+--           and isCDExpired(consumables2.potion.cooldown_started,consumables2.potion.cooldown_duration,1) then
+--         debug_print("Trying Potion")
+--         tryConsume(consumables.potion)
+--       elseif AutoManaSettings.use_flask and oom
+--           and isCDExpired(consumables2.flask.cooldown_started,consumables2.flask.cooldown_duration,1) then
+--         debug_print("Trying Flask")
+--         tryConsume(consumables.flask)
+--       else
+--         RunBody(macro_body)
+--       end
+--       last_fired = now
+--     else
+--       RunBody(macro_body)
+--       last_fired = now
+--     end
+-- end
+
 -- efficieny changes:
 -- the checks should track the last cooldown value and ask if enough time has elapsed to care, so it doesn't have to scan bags as often
 -- alch stone could be checked again only if an equipment update event fired
 local last_fired = GetTime()
 function AutoMana(macro_body)
-  local p = "player"
-  local now = GetTime()
-  -- local gcd_done = now - last_fired > 1.0 -- not 1.5 due to latency, you want to be able to start 'early'
-  -- ^ this seems like it's not working right, the intent was just to not drink too much at once
-  local gcd_done = true
-  debug_print(last_fired)
+    local p = "player"
+    local now = GetTime()
+    -- local gcd_done = now - last_fired > 1.0 -- not 1.5 due to latency, you want to be able to start 'early'
+    -- ^ this seems like it's not working right, the intent was just to not drink too much at once
+    local gcd_done = true
+    debug_print(last_fired)
 
-  if AutoManaSettings.enabled and gcd_done
-    and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
-    and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
-    -- debug_print("fork entered")
-    local has_stone = hasAlchStone()
-    local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
-    local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
-    local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
-    -- debug_print("fork started")
-    -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
-    if AutoManaSettings.use_tea and gcd_done and (missing_mana > 1750) and (tea and tea.cd_expired) then
-      debug_print("Trying Tea")
-      tryConsume(tea)
-    elseif AutoManaSettings.use_rejuv and gcd_done and (missing_health > (has_stone and 2340 or 1760)) and rdyConsume(consumables.rejuv) then
-      debug_print("Trying Rejuv")
-      tryConsume(consumables.rejuv)
-    elseif AutoManaSettings.use_potion and gcd_done and (missing_mana > (has_stone and 2992 or 2250)) and rdyConsume(consumables.potion)then
-      debug_print("Trying Potion")
-      tryConsume(consumables.potion)
-    elseif AutoManaSettings.use_flask and gcd_done and oom and rdyConsume(consumables.flask)then
-      debug_print("Trying Flask")
-      tryConsume(consumables.flask)
+    if AutoManaSettings.enabled and gcd_done
+      and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
+      and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
+      -- debug_print("fork entered")
+      local has_stone = hasAlchStone()
+      local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
+      local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
+      local tea = AutoManaSettings.use_tea and (updateConsume(consumables.tea_nord) and consumables.tea_nord) or (updateConsume(consumables.tea_sugar) and consumables.tea_sugar)
+      -- debug_print("fork started")
+      -- When I tried a chained `or` version the game didn't fire off the consumes consistently.
+      if AutoManaSettings.use_tea and gcd_done and (missing_mana > 1750) and (tea and tea.cd_expired) then
+        debug_print("Trying Tea")
+        tryConsume(tea)
+      elseif AutoManaSettings.use_rejuv and gcd_done and (missing_health > (has_stone and 2340 or 1760)) and rdyConsume(consumables.rejuv) then
+        debug_print("Trying Rejuv")
+        tryConsume(consumables.rejuv)
+      elseif AutoManaSettings.use_potion and gcd_done and (missing_mana > (has_stone and 2992 or 2250)) and rdyConsume(consumables.potion)then
+        debug_print("Trying Potion")
+        tryConsume(consumables.potion)
+      elseif AutoManaSettings.use_flask and gcd_done and oom and rdyConsume(consumables.flask)then
+        debug_print("Trying Flask")
+        tryConsume(consumables.flask)
+      else
+        debug_print("Running body")
+        RunBody(macro_body)
+      end
+      last_fired = now
     else
-      debug_print("Running body")
       RunBody(macro_body)
+      last_fired = now
     end
-    last_fired = now
-  else
-    RunBody(macro_body)
-    last_fired = now
-  end
 end
 
 -------------------------------------------------
