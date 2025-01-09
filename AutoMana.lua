@@ -237,7 +237,7 @@ local function handleCommands(msg,editbox)
     AutoManaSettings.enabled = not AutoManaSettings.enabled
     amprint("Addon enabled: "..showOnOff(AutoManaSettings.enabled))
   else -- make group size color by if you're in a big enough group currently
-    amprint('AutoMana: Wrap a macro with AutoMana('..colorize("macro",amcolor.yellow)..') to auto-use consumes.')
+    amprint('AutoMana: Automatically use mana consumes.')
     amprint('- Addon '..colorize("enable",amcolor.green)..'d [' .. showOnOff(AutoManaSettings.enabled) .. ']')
     amprint('- Active in ' .. colorize("combat",amcolor.green)..' only [' .. showOnOff(AutoManaSettings.combat_only) .. ']')
     amprint('- Active at minimum group ' .. colorize("size",amcolor.green) .. ' [' .. AutoManaSettings.min_group_size .. ']')
