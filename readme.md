@@ -9,7 +9,7 @@ This addon uses mana consumes as soon as possible when you have enough mana miss
 I've previously made some macros that do this for you but having to toggle settings on more than one spell when I wanted to change my consume use on the fly was quite painful. To that end I've made this addon that automatically hooks into casts to avoid macro use at all.
 This is particularly useful for toggling mana potion use since on some bosses you don't care too much about potion cooldown.  
 
-The current settings are:
+`/automana` to see in game settings, the current settings are:
 * Toggle the addon being enabled
 * Toggle whether to use consumes only in combat
 * Choose the size of group you need to be in for the addon be active
