@@ -105,15 +105,17 @@ function consumeReady(which)
 end
 
 local last_fired = 0
-function AutoMana(macro_body)
+function AutoMana(macro_body,fn)
+    local fn = fn or RunBody
     local p = "player"
     local now = GetTime()
-    local gcd_done = now > last_fired + 1.4 -- delay after item use or client gets real unhappy
+    local gcd_done = now > last_fired + 1.4 -- delay after item use before using another one or client gets unhappy
+    -- local gcd_done = true
 
-    if not gcd_done then
-      debug_print("On GCD Delay")
-      return
-    end
+    -- if not gcd_done then
+    --   debug_print("On GCD Delay")
+    --   return
+    -- end
 
     if AutoManaSettings.enabled and gcd_done
       and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
@@ -144,16 +146,39 @@ function AutoMana(macro_body)
         last_fired = now
       else
         debug_print("Running body")
-        RunBody(macro_body)
+        fn(macro_body)
       end
     else
-      RunBody(macro_body)
+      fn(macro_body)
     end
 end
 
 -------------------------------------------------
 
-local AutoMana = CreateFrame("FRAME")
+local AutoManaFrame = CreateFrame("FRAME")
+
+function AM_CastSpellByName(spell,a2,a3,a4,a5,a6,a7,a8,a9,a10)
+  AutoMana(spell,function () AutoManaFrame.orig_CastSpellByName(spell,a2,a3,a4,a5,a6,a7,a8,a9,a10) end)
+end
+
+function AM_CastSpell(spell,a2,a3,a4,a5,a6,a7,a8,a9,a10)
+  AutoMana(spell,function () AutoManaFrame.orig_CastSpell(spell,a2,a3,a4,a5,a6,a7,a8,a9,a10) end)
+end
+
+local orig_CastSpell = CastSpell
+local orig_CastSpellByName = CastSpellByName
+local function HookCasts(unhook)
+  if unhook then -- not neccesary really
+    CastSpell = orig_CastSpell
+    CastSpellByName = orig_CastSpellByName
+  else
+    AutoManaFrame.orig_CastSpell = orig_CastSpell
+    AutoManaFrame.orig_CastSpellByName = orig_CastSpellByName
+    CastSpell = AM_CastSpell
+    CastSpellByName = AM_CastSpellByName
+  end
+end
+HookCasts() -- hook right now in case another addon does further hooks
 
 local function OnEvent()
   if event == "UI_ERROR_MESSAGE" and arg1 == "Not enough mana" then
@@ -217,17 +242,17 @@ local function handleCommands(msg,editbox)
     amprint('- Active in ' .. colorize("combat",amcolor.green)..' only [' .. showOnOff(AutoManaSettings.combat_only) .. ']')
     amprint('- Active at minimum group ' .. colorize("size",amcolor.green) .. ' [' .. AutoManaSettings.min_group_size .. ']')
     amprint('- Use ' .. colorize("tea",amcolor.green) .. ' [' .. showOnOff(AutoManaSettings.use_tea) .. ']')
-    amprint('- Use '.. colorize("pot",amcolor.green) .. 'ions at all [' .. showOnOff(AutoManaSettings.use_potion) .. ']')
+    amprint('- Use Major Mana '.. colorize("pot",amcolor.green) .. 'ion [' .. showOnOff(AutoManaSettings.use_potion) .. ']')
     amprint('- Use Major ' .. colorize("rejuv",amcolor.green) .. 'enation Potion [' .. showOnOff(AutoManaSettings.use_rejuv) .. ']')
     amprint('- Use ' ..colorize("flask",amcolor.green) ..' of Distilled Wisdom [' .. showOnOff(AutoManaSettings.use_flask) .. ']')
   end
 end
 
-AutoMana:RegisterEvent("UI_ERROR_MESSAGE")
-AutoMana:RegisterEvent("BAG_UPDATE")
-AutoMana:RegisterEvent("UNIT_INVENTORY_CHANGED")
-AutoMana:RegisterEvent("ADDON_LOADED")
-AutoMana:SetScript("OnEvent", OnEvent)
+AutoManaFrame:RegisterEvent("UI_ERROR_MESSAGE")
+AutoManaFrame:RegisterEvent("BAG_UPDATE")
+AutoManaFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
+AutoManaFrame:RegisterEvent("ADDON_LOADED")
+AutoManaFrame:SetScript("OnEvent", OnEvent)
   
 SLASH_AUTOMANA1 = "/automana";
 SlashCmdList["AUTOMANA"] = handleCommands

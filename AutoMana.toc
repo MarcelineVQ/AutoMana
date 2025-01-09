@@ -2,9 +2,7 @@
 ## Title: AutoMana
 ## Notes: Automatic Mana Consume Usage
 ## X-Category: Interface Enhancements
-## X-Date: 2024-02-18
-## X-Website:
-## Version: 1.3
+## Version: 2.0
 ## SavedVariablesPerCharacter: AutoManaSettings
 
 AutoMana.lua
