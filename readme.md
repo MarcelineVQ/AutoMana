@@ -14,11 +14,11 @@ This is particularly useful for toggling mana potion use since on some bosses yo
 * Toggle whether to use consumes only in combat
 * Choose the size of group you need to be in for the addon be active
 * Toggle using tea
-* Toggle using potions at all, this means Major Mana Potion or Major Rejuvenation Potion
+* Toggle using Major Mana Potions
 * Toggle using Major Rejuvenation Potion
 * Toggle using Flask of Distilled Wisdom if you run out of mana
 
 Using a flask sets your mana to 2k if you have less than this, which means it's suitable as an (expensive) emergency potion.  
-If enabled, Major Rejuvenation will be used instead of Major Mana if you're missing enough health to benefit from it.  
+If enabled, Major Rejuvenation will be used instead of Major Mana if you're missing enough health to benefit from it. In practise this rarely results in the mana if gives being wasted, despite triggering from health.  
 
 * This addon is made by and for `Weird Vibes` of Turtle WoW.  
