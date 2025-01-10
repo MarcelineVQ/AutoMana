@@ -21,7 +21,4 @@ This is particularly useful for toggling mana potion use since on some bosses yo
 Using a flask sets your mana to 2k if you have less than this, which means it's suitable as an (expensive) emergency potion.  
 If enabled, Major Rejuvenation will be used instead of Major Mana if you're missing enough health to benefit from it.  
 
-# The settings menu in game:  
-![AutoMan Menu](./ammenu.png)
-
 * This addon is made by and for `Weird Vibes` of Turtle WoW.  
