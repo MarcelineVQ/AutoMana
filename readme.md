@@ -1,4 +1,4 @@
-AutoMana 2.0
+AutoMana 2.1
 ===
 An addon to manage your mana consuming in Turtle WoW.  
 ---
