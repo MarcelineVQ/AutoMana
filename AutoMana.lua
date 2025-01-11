@@ -165,17 +165,31 @@ function AM_CastSpell(spell,a2,a3,a4,a5,a6,a7,a8,a9,a10)
   AutoMana(spell,function () AutoManaFrame.orig_CastSpell(spell,a2,a3,a4,a5,a6,a7,a8,a9,a10) end)
 end
 
+-- action bar buttons are spells too
+function AM_UseAction(slot,a2,a3,a4,a5,a6,a7,a8,a9,a10)
+  if AutoManaFrame.cachedSpells[GetActionTexture(slot)] then
+    AutoMana(slot,function () AutoManaFrame.orig_UseAction(slot,a2,a3,a4,a5,a6,a7,a8,a9,a10) end)
+  else
+    AutoManaFrame.orig_UseAction(slot,a2,a3,a4,a5,a6,a7,a8,a9,a10)
+  end
+end
+
 local orig_CastSpell = CastSpell
 local orig_CastSpellByName = CastSpellByName
+local orig_UseAction = UseAction
+
 local function HookCasts(unhook)
   if unhook then -- not neccesary really
     CastSpell = orig_CastSpell
     CastSpellByName = orig_CastSpellByName
+    UseAction = orig_UseAction
   else
     AutoManaFrame.orig_CastSpell = orig_CastSpell
     AutoManaFrame.orig_CastSpellByName = orig_CastSpellByName
+    AutoManaFrame.orig_UseAction = orig_UseAction
     CastSpell = AM_CastSpell
     CastSpellByName = AM_CastSpellByName
+    UseAction = AM_UseAction
   end
 end
 HookCasts() -- hook right now in case another addon does further hooks
@@ -204,6 +218,28 @@ local function OnEvent()
     consumables.potion = FindItemById("13444")
     consumables.rejuv = FindItemById("18253")
     consumables.flask = FindItemById("13511")
+  elseif event == "PLAYER_ENTERING_WORLD" then -- spell cache
+    AutoManaFrame.cachedSpells = {}
+    -- Loop through the spellbook and cache spell names and ranks
+    local i = 1
+    while true do
+      local spellName, spellRank = GetSpellName(i, BOOKTYPE_SPELL)
+      if not spellName then
+        break -- End of spellbook
+      end
+
+      AutoManaFrame.cachedSpells[GetSpellTexture(i, BOOKTYPE_SPELL)] = true
+      i = i + 1
+    end
+    i = 0
+    while true do
+      local spellName, spellRank = GetSpellName(i, BOOKTYPE_PET)
+      if not spellName then
+        break -- End of spellbook
+      end
+      AutoManaFrame.cachedSpells[GetSpellTexture(i, BOOKTYPE_PET)] = true
+      i = i + 1
+    end
   end
 end
 
@@ -252,6 +288,7 @@ AutoManaFrame:RegisterEvent("UI_ERROR_MESSAGE")
 AutoManaFrame:RegisterEvent("BAG_UPDATE")
 AutoManaFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 AutoManaFrame:RegisterEvent("ADDON_LOADED")
+AutoManaFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 AutoManaFrame:SetScript("OnEvent", OnEvent)
   
 SLASH_AUTOMANA1 = "/automana";
