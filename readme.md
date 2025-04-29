@@ -13,8 +13,9 @@ This is particularly useful for toggling mana potion use since on some bosses yo
 * Toggle the addon being enabled
 * Toggle whether to use consumes only in combat
 * Choose the size of group you need to be in for the addon be active
-* Toggle using tea
+* Toggle using Tea
 * Toggle using Major Mana Potions
+* Toggle using Healthstones when below 30% hp, or below 2.5k hp
 * Toggle using Major Rejuvenation Potion
 * Toggle using Flask of Distilled Wisdom if you run out of mana
 

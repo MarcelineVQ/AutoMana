@@ -49,15 +49,16 @@ local defaults =
   use_potion = false,
   use_rejuv = false,
   use_flask = false,
+  use_healthstone = true,
 }
 
 local consumables = {}
 
 -- taken from supermacros
 local function ItemLinkToName(link)
-	if ( link ) then
+  if ( link ) then
     return gsub(link,"^.*%[(.*)%].*$","%1");
-	end
+  end
 end
 
 local function hasAlchStone()
@@ -67,35 +68,122 @@ end
 
 -- adapted from supermacros
 local function RunLine(...)
-	for k=1,arg.n do
-		local text=arg[k];
-        ChatFrameEditBox:SetText(text);
-        ChatEdit_SendText(ChatFrameEditBox);
-	end
+  for k=1,arg.n do
+    local text=arg[k];
+      ChatFrameEditBox:SetText(text);
+      ChatEdit_SendText(ChatFrameEditBox);
+  end
 end
 
 -- adapted from supermacros
 local function RunBody(text)
-	local body = text;
-	local length = strlen(body);
-	for w in string.gfind(body, "[^\n]+") do
-		RunLine(w);
-	end
+  local body = text;
+  local length = strlen(body);
+  for w in string.gfind(body, "[^\n]+") do
+    RunLine(w);
+  end
 end
 
-function FindItemById(item_id)
-	if not item_id then return end
-	for bag = 0,NUM_BAG_FRAMES do
-		for slot = 1,MAX_CONTAINER_ITEMS do
-			local link = GetContainerItemLink(bag,slot);
-			if link then
-        local _,_,id = string.find(link,"item:(%d+)")
-				if id == item_id then
-					return { bag = bag, slot = slot}
-				end
-			end
-		end
-	end
+-- Finds an item by either its numeric ID or its name, using string.find
+-- @param consume     Optional table: { bag = b, slot = s } to check first
+-- @param identifier  Number or string: item ID (e.g. 51916) or item name (e.g. "Healthstone")
+-- @param bag         Optional bag index to search first (0‑4)
+-- @return table { bag = b, slot = s } or nil
+function AMFindItem(consume, identifier, bag)
+  if not identifier then return end
+
+  local searchID   = tonumber(identifier)
+  local searchName = nil
+  if not searchID then
+    searchName = identifier
+  end
+
+  -- Helper: does this item link match our ID or name?
+  local function linkMatches(link)
+    -- extract item ID via string.find captures
+    local _, _, idStr = string.find(link, "item:(%d+)")
+    local id = idStr and tonumber(idStr)
+
+    if searchID then
+      return id == searchID
+    else
+      -- extract item name in brackets via string.find captures
+      local _, _, name = string.find(link, "%[(.-)%]")
+      -- exact match? partial?
+      return name == searchName or (name and string.find(name, identifier))
+    end
+  end
+
+  -- 1) check the consume slot if provided
+  if consume and consume.bag and consume.slot then
+    local link = GetContainerItemLink(consume.bag, consume.slot)
+    if link and linkMatches(link) then
+      return consume
+    end
+  end
+
+  -- 2) scan a single bag
+  local function SearchBag(b)
+    for slot = 1, GetContainerNumSlots(b) do
+      local link = GetContainerItemLink(b, slot)
+      if link and linkMatches(link) then
+        return { bag = b, slot = slot }
+      end
+    end
+  end
+
+  -- 3) search the specified bag first
+  if bag then
+    local result = SearchBag(bag)
+    if result then return result end
+  end
+
+  -- 4) search all other bags
+  for b = 0, 4 do
+    if b ~= bag then
+      local result = SearchBag(b)
+      if result then return result end
+    end
+  end
+end
+
+function FindItemById(consume, item_id, bag)
+  if not item_id then return end
+
+  if consume then
+    local link = GetContainerItemLink(consume.bag, consume.slot)
+    if link then
+      local _, _, id = string.find(link, "item:(%d+)")
+      if id == item_id then
+        return consume
+      end
+    end
+  end
+
+  -- Function to search a single bag for the item
+  local function SearchBag(b)
+    for slot = 1, GetContainerNumSlots(b) do
+      local link = GetContainerItemLink(b, slot)
+      if link then
+        local _, _, id = string.find(link, "item:(%d+)")
+        if id == item_id then
+          return { bag = b, slot = slot }
+        end
+      end
+    end
+  end
+
+  -- Search the specified bag first
+  local result = bag and SearchBag(bag)
+  if result then return result end
+
+  -- Search other bags if not found
+  for b = 0, 4 do
+    if b ~= bag then
+      result = SearchBag(b)
+      if result then return result end
+    end
+  end
 end
 
 function consumeReady(which)
@@ -106,51 +194,54 @@ end
 
 local last_fired = 0
 function AutoMana(macro_body,fn)
-    local fn = fn or RunBody
-    local p = "player"
-    local now = GetTime()
-    local gcd_done = now > last_fired + 1.4 -- delay after item use before using another one or client gets unhappy
-    -- local gcd_done = true
+  local fn = fn or RunBody
+  local p = "player"
+  local now = GetTime()
+  local gcd_done = now > last_fired + 1.5 -- delay after item use before using another one or client gets unhappy, even if items have no gcd
+  -- local gcd_done = true
 
-    -- if not gcd_done then
-    --   debug_print("On GCD Delay")
-    --   return
-    -- end
+  if AutoManaSettings.enabled and gcd_done
+    and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
+    and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
 
-    if AutoManaSettings.enabled and gcd_done
-      and (UnitAffectingCombat(p) or not AutoManaSettings.combat_only)
-      and (max(1,max(GetNumRaidMembers(),GetNumPartyMembers())) >= AutoManaSettings.min_group_size) then
+    local hp = UnitHealth(p)
+    local hp_max = UnitHealthMax(p)
+    local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
+    local missing_health = abs (hp - hp_max)
+    local health_perc = hp / hp_max
+    local healthstone_threshold = (hp_max <= 5000 and health_perc < 0.5) or health_perc < 0.3
 
-      local missing_mana = abs (UnitMana(p) - UnitManaMax(p))
-      local missing_health = abs (UnitHealth(p) - UnitHealthMax(p))
-
-      if AutoManaSettings.use_tea and (missing_mana > 1350) and consumeReady(consumables.tea) then
-        debug_print("Trying Tea")
-        UseContainerItem(consumables.tea.bag,consumables.tea.slot)
-        oom = false
-        last_fired = now
-      elseif AutoManaSettings.use_rejuv and (missing_health > (consumables.has_alchstone and 2340 or 1760)) and consumeReady(consumables.rejuv) then
-        debug_print("Trying Rejuv")
-        UseContainerItem(consumables.rejuv.bag,consumables.rejuv.slot)
-        oom = false
-        last_fired = now
-      elseif AutoManaSettings.use_potion and (missing_mana > (consumables.has_alchstone and 2992 or 2250)) and consumeReady(consumables.potion) then
-        debug_print("Trying Potion")
-        UseContainerItem(consumables.potion.bag,consumables.potion.slot)
-        oom = false
-        last_fired = now
-      elseif AutoManaSettings.use_flask and oom and consumeReady(consumables.flask) then
-        debug_print("Trying Flask")
-        UseContainerItem(consumables.flask.bag,consumables.flask.slot)
-        oom = false
-        last_fired = now
-      else
-        debug_print("Running body")
-        fn(macro_body)
-      end
+    if AutoManaSettings.use_tea and (missing_mana > 1350) and consumeReady(consumables.tea) then
+      debug_print("Trying Tea")
+      UseContainerItem(consumables.tea.bag,consumables.tea.slot)
+      oom = false
+      last_fired = now
+    elseif AutoManaSettings.use_rejuv and (missing_health > (consumables.has_alchstone and 2340 or 1760)) and consumeReady(consumables.rejuv) then
+      debug_print("Trying Rejuv")
+      UseContainerItem(consumables.rejuv.bag,consumables.rejuv.slot)
+      oom = false
+      last_fired = now
+    elseif AutoManaSettings.use_healthstone and healthstone_threshold and consumeReady(consumables.healthstone) then
+      debug_print("Trying Healthstone")
+      UseContainerItem(consumables.healthstone.bag,consumables.healthstone.slot)
+      last_fired = now
+    elseif AutoManaSettings.use_potion and (missing_mana > (consumables.has_alchstone and 2992 or 2250)) and consumeReady(consumables.potion) then
+      debug_print("Trying Potion")
+      UseContainerItem(consumables.potion.bag,consumables.potion.slot)
+      oom = false
+      last_fired = now
+    elseif AutoManaSettings.use_flask and oom and consumeReady(consumables.flask) then
+      debug_print("Trying Flask")
+      UseContainerItem(consumables.flask.bag,consumables.flask.slot)
+      oom = false
+      last_fired = now
     else
+      debug_print("Running body")
       fn(macro_body)
     end
+  else
+    fn(macro_body)
+  end
 end
 
 -------------------------------------------------
@@ -211,35 +302,29 @@ local function OnEvent()
     consumables.has_alchstone = hasAlchStone()
   elseif event == "BAG_UPDATE" then -- consume slot update
     -- this should only actually search for the missing item
-    consumables.tea = FindItemById("61675")
+    consumables.tea = AMFindItem(consumables.tea, "61675", arg1)
     if not consumables.tea then
-      consumables.tea = FindItemById("15723")
+      consumables.tea = AMFindItem(consumables.tea, "15723", arg1)
     end
-    consumables.potion = FindItemById("13444")
-    consumables.rejuv = FindItemById("18253")
-    consumables.flask = FindItemById("13511")
+    consumables.potion = AMFindItem(consumables.potion, "13444", arg1)
+    consumables.rejuv = AMFindItem(consumables.rejuv, "18253", arg1)
+    consumables.healthstone = AMFindItem(consumables.healthstone, "Healthstone", arg1)
+    consumables.flask = AMFindItem(consumables.flask, "13511", arg1)
   elseif event == "PLAYER_ENTERING_WORLD" then -- spell cache
     AutoManaFrame.cachedSpells = {}
-    -- Loop through the spellbook and cache spell names and ranks
-    local i = 1
-    while true do
-      local spellName, spellRank = GetSpellName(i, BOOKTYPE_SPELL)
-      if not spellName then
-        break -- End of spellbook
+    -- Loop through the spellbook and cache player spells
+    local function CacheSpellTextures(bookType)
+      local i = 1
+      while true do
+        local spellTexture = GetSpellTexture(i, bookType)
+        if not spellTexture then break end
+        AutoManaFrame.cachedSpells[spellTexture] = true
+        i = i + 1
       end
+  end
 
-      AutoManaFrame.cachedSpells[GetSpellTexture(i, BOOKTYPE_SPELL)] = true
-      i = i + 1
-    end
-    i = 0
-    while true do
-      local spellName, spellRank = GetSpellName(i, BOOKTYPE_PET)
-      if not spellName then
-        break -- End of spellbook
-      end
-      AutoManaFrame.cachedSpells[GetSpellTexture(i, BOOKTYPE_PET)] = true
-      i = i + 1
-    end
+  CacheSpellTextures(BOOKTYPE_SPELL)
+  CacheSpellTextures(BOOKTYPE_PET)
   end
 end
 
@@ -255,6 +340,9 @@ local function handleCommands(msg,editbox)
   elseif args[1] == "rejuv" or args[1] == "rejuvenation" then
     AutoManaSettings.use_rejuv = not AutoManaSettings.use_rejuv
     amprint("Use Major Rejuvenation Potion: "..showOnOff(AutoManaSettings.use_rejuv))
+  elseif args[1] == "stone" or args[1] == "healthstone" then
+    AutoManaSettings.use_healthstone = not AutoManaSettings.use_healthstone
+    amprint("Use Healthstone: "..showOnOff(AutoManaSettings.use_healthstone))
   elseif args[1] == "flask" then
     AutoManaSettings.use_flask = not AutoManaSettings.use_flask
     amprint("Use Flask of Distilled Wisdom: "..showOnOff(AutoManaSettings.use_flask))
@@ -280,6 +368,7 @@ local function handleCommands(msg,editbox)
     amprint('- Use ' .. colorize("tea",amcolor.green) .. ' [' .. showOnOff(AutoManaSettings.use_tea) .. ']')
     amprint('- Use Major Mana '.. colorize("pot",amcolor.green) .. 'ion [' .. showOnOff(AutoManaSettings.use_potion) .. ']')
     amprint('- Use Major ' .. colorize("rejuv",amcolor.green) .. 'enation Potion [' .. showOnOff(AutoManaSettings.use_rejuv) .. ']')
+    amprint('- Use Health' .. colorize("stone",amcolor.green) .. ' [' .. showOnOff(AutoManaSettings.use_healthstone) .. ']')
     amprint('- Use ' ..colorize("flask",amcolor.green) ..' of Distilled Wisdom [' .. showOnOff(AutoManaSettings.use_flask) .. ']')
   end
 end
